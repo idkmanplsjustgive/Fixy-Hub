@@ -108,7 +108,19 @@ local ESPBoxes, DeadBodyBoxes, DeadBodyTexts, notifiedBodies = {}, {}, {}, {}
 local hue=0
 local function getRainbowColor() hue=(hue+1)%360; return Color3.fromHSV(hue/360,1,1) end
 
-local function createESPBox() local box=Drawing.new("Square"); box.Thickness=2; box.Filled=false; box.Size=Vector2.new(20,20); return box end
+local function createESPBox() 
+    local box = Drawing.new("Square") 
+    box.Thickness = 2 
+    box.Filled = false 
+    box.Size = Vector2.new(20,20) 
+    local text = Drawing.new("Text")
+    text.Text = ""
+    text.Center = true
+    text.Outline = true
+    text.Size = 14 -- smaller role text
+    return {Box=box, Text=text}
+end
+
 local function createDeadBodyESP(body)
     local box=Drawing.new("Square"); box.Color=Color3.fromRGB(255,0,0); box.Thickness=2; box.Filled=false; box.Size=Vector2.new(30,30)
     local text=Drawing.new("Text"); text.Text="DEAD BODY"; text.Center=true; text.Outline=true; text.Size=18
@@ -128,22 +140,37 @@ end)
 
 -- ESP render
 RunService.RenderStepped:Connect(function()
-    -- Humanoid ESP
+    -- Humanoid + Role ESP
     for _,plr in ipairs(Players:GetPlayers()) do
         if plr~=player and plr.Character and plr.Character:FindFirstChild("HumanoidRootPart") then
-            if state.esp then
+            if state.esp or state.roleView then
                 if not ESPBoxes[plr] then ESPBoxes[plr]=createESPBox() end
-                local box=ESPBoxes[plr]
+                local boxData=ESPBoxes[plr]
+                local box=boxData.Box
+                local text=boxData.Text
+
                 local pos,onScreen=camera:WorldToViewportPoint(plr.Character.HumanoidRootPart.Position)
                 if onScreen then
                     box.Position=Vector2.new(pos.X-10,pos.Y-10)
+                    box.Visible=true
+                    box.Size=Vector2.new(20,20)
+
                     local role="Neutral"
                     local ps=plr:FindFirstChild("PublicStates")
                     if ps and ps:FindFirstChild("Role") then role=ps.Role.Value end
-                    box.Color=ROLE_COLORS[role] or Color3.new(1,1,1)
-                    box.Visible=true
-                else box.Visible=false end
-            elseif ESPBoxes[plr] then ESPBoxes[plr]:Remove(); ESPBoxes[plr]=nil end
+                    text.Text=role
+                    text.Position=Vector2.new(pos.X,pos.Y-25)
+                    text.Visible=true
+                    text.Color=ROLE_COLORS[role] or Color3.new(1,1,1)
+                else
+                    box.Visible=false
+                    text.Visible=false
+                end
+            elseif ESPBoxes[plr] then
+                ESPBoxes[plr].Box:Remove()
+                ESPBoxes[plr].Text:Remove()
+                ESPBoxes[plr]=nil
+            end
         end
     end
 
