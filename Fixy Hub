@@ -1,7 +1,15 @@
 --[[ 
     Lley And Aris Chat Gpt Hub
-    Features: Noclip, Max Zoom, Full Vision, Role View, ESP (Humanoids), Dead Body ESP + Rainbow Text + Notification
+    All-in-one Luau Script
 ]]--
+
+-- Services
+local Players = game:GetService("Players")
+local RunService = game:GetService("RunService")
+local Lighting = game:GetService("Lighting")
+local TweenService = game:GetService("TweenService")
+local camera = workspace.CurrentCamera
+local player = Players.LocalPlayer
 
 -- Load WindUI
 local WindUI
@@ -9,19 +17,9 @@ do
     local ok, result = pcall(function()
         return require("./src/Init")
     end)
-    if ok then
-        WindUI = result
-    else 
-        WindUI = loadstring(game:HttpGet("https://raw.githubusercontent.com/Footagesus/WindUI/main/dist/main.lua"))()
-    end
+    if ok then WindUI = result
+    else WindUI = loadstring(game:HttpGet("https://raw.githubusercontent.com/Footagesus/WindUI/main/dist/main.lua"))() end
 end
-
-local Players = game:GetService("Players")
-local RunService = game:GetService("RunService")
-local Lighting = game:GetService("Lighting")
-local TweenService = game:GetService("TweenService")
-local player = Players.LocalPlayer
-local camera = workspace.CurrentCamera
 
 -- States
 local state = {
@@ -36,17 +34,12 @@ local oldCameraMaxZoom = player.CameraMaxZoomDistance
 local oldLighting = {FogStart=Lighting.FogStart,FogEnd=Lighting.FogEnd,Ambient=Lighting.Ambient}
 
 -- Role Colors
-local ROLE_COLORS = {
-    Crewmate = Color3.fromRGB(0,255,0),
-    Imposter = Color3.fromRGB(255,0,0),
-    Neutral = Color3.fromRGB(255,165,0), -- Orange
-}
+local ROLE_COLORS = {Crewmate=Color3.fromRGB(0,255,0), Imposter=Color3.fromRGB(255,0,0), Neutral=Color3.fromRGB(255,165,0)}
 
--- WindUI Window
+-- Create Window
 local Window = WindUI:CreateWindow({
-    Title = "ChatGPT Aris Hub",
+    Title = "Lley And Aris Chat Gpt Hub",
     Folder = "ChatGPTArisHub",
-    Icon = "",
     OpenButton = {
         Title = "Lley And Aris Chat Gpt Hub",
         Enabled = true,
@@ -55,203 +48,114 @@ local Window = WindUI:CreateWindow({
     },
 })
 
--- Purple Theme
 WindUI:AddTheme({
-    Name = "PurpleTheme",
-    Accent = Color3.fromRGB(128, 0, 128),
-    Dialog = Color3.fromRGB(30, 0, 60),
-    Outline = Color3.fromRGB(128, 0, 128),
-    Text = Color3.fromRGB(255,255,255),
-    Placeholder = Color3.fromRGB(180,180,180),
-    Button = Color3.fromRGB(80,0,120),
-    Icon = Color3.fromRGB(200,100,255),
-    WindowBackground = Color3.fromRGB(20,0,40),
-    TopbarButtonIcon = Color3.fromRGB(200,100,255),
-    TopbarTitle = Color3.fromRGB(255,255,255),
-    TopbarAuthor = Color3.fromRGB(180,180,180),
-    TopbarIcon = Color3.fromRGB(200,100,255),
-    TabBackground = Color3.fromRGB(40,0,80),
-    TabTitle = Color3.fromRGB(255,255,255),
-    TabIcon = Color3.fromRGB(200,100,255),
-    ElementBackground = Color3.fromRGB(50,0,100),
-    ElementTitle = Color3.fromRGB(255,255,255),
-    ElementDesc = Color3.fromRGB(200,200,200),
-    ElementIcon = Color3.fromRGB(200,100,255),
+    Name="PurpleTheme",
+    Accent=Color3.fromRGB(128,0,128), Dialog=Color3.fromRGB(30,0,60),
+    Outline=Color3.fromRGB(128,0,128), Text=Color3.fromRGB(255,255,255),
+    Button=Color3.fromRGB(80,0,120), WindowBackground=Color3.fromRGB(20,0,40),
 })
 WindUI:SetTheme("PurpleTheme")
 
 -- Main Tab
-local MainTab = Window:Tab({Title = "Main", Icon = "solar:check-square-bold"})
+local MainTab = Window:Tab({Title="Main", Icon="solar:check-square-bold"})
 
 -- Noclip Section
-local NoclipSection = MainTab:Section({Title = "Noclip"})
-NoclipSection:Toggle({
-    Title = "Enable Noclip",
-    Default = false,
-    Callback = function(value) state.noclip = value end
-})
+local NoclipSection = MainTab:Section({Title="Noclip"})
+NoclipSection:Toggle({Title="Enable Noclip", Default=false, Callback=function(v) state.noclip=v end})
 
 -- ESP Section
-local ESPSection = MainTab:Section({Title = "ESP"})
-ESPSection:Toggle({
-    Title = "Role View",
-    Default = false,
-    Callback = function(value)
-        state.roleView = value
-        if value then
-            loadstring(game:HttpGet("https://raw.githubusercontent.com/mehCake/Roblox-Imposters-and-roles-script/refs/heads/main/Script.txt"))()
-        else
-            for _, plr in ipairs(Players:GetPlayers()) do
-                if plr.Character then
-                    for _, child in ipairs(plr.Character:GetDescendants()) do
-                        if child.Name == "RoleTag" then child:Destroy() end
-                    end
+local ESPSection = MainTab:Section({Title="ESP"})
+ESPSection:Toggle({Title="Role View", Default=false, Callback=function(v)
+    state.roleView=v
+    if v then
+        loadstring(game:HttpGet("https://raw.githubusercontent.com/mehCake/Roblox-Imposters-and-roles-script/refs/heads/main/Script.txt"))()
+    else
+        for _,plr in ipairs(Players:GetPlayers()) do
+            if plr.Character then
+                for _,c in ipairs(plr.Character:GetDescendants()) do
+                    if c.Name=="RoleTag" then c:Destroy() end
                 end
             end
         end
     end
-})
-ESPSection:Toggle({
-    Title = "ESP Humanoids Only",
-    Default = false,
-    Callback = function(value) state.esp = value end
-})
+end})
+ESPSection:Toggle({Title="ESP Humanoids Only", Default=false, Callback=function(v) state.esp=v end})
 
 -- Game Enhancer Section
-local GameEnhancerSection = MainTab:Section({Title = "Game Enhancer"})
-GameEnhancerSection:Toggle({
-    Title = "Full Vision",
-    Default = false,
-    Callback = function(value)
-        state.fullVision = value
-        if value then
-            Lighting.FogStart = 0
-            Lighting.FogEnd = 100000
-            Lighting.Ambient = Color3.fromRGB(255,255,255)
-        else
-            Lighting.FogStart = oldLighting.FogStart
-            Lighting.FogEnd = oldLighting.FogEnd
-            Lighting.Ambient = oldLighting.Ambient
-        end
-    end
-})
-GameEnhancerSection:Toggle({
-    Title = "Max Zoom",
-    Default = false,
-    Callback = function(value)
-        state.maxZoom = value
-        player.CameraMaxZoomDistance = value and 1000 or oldCameraMaxZoom
-    end
-})
-GameEnhancerSection:Toggle({
-    Title = "Dead Body ESP",
-    Default = false,
-    Callback = function(value) state.deadBodyESP = value end
-})
+local GameEnhancerSection = MainTab:Section({Title="Game Enhancer"})
+GameEnhancerSection:Toggle({Title="Full Vision", Default=false, Callback=function(v)
+    state.fullVision=v
+    if v then Lighting.FogStart=0; Lighting.FogEnd=100000; Lighting.Ambient=Color3.new(1,1,1)
+    else Lighting.FogStart=oldLighting.FogStart; Lighting.FogEnd=oldLighting.FogEnd; Lighting.Ambient=oldLighting.Ambient end
+end})
+GameEnhancerSection:Toggle({Title="Max Zoom", Default=false, Callback=function(v)
+    state.maxZoom=v
+    player.CameraMaxZoomDistance = v and 1000 or oldCameraMaxZoom
+end})
+GameEnhancerSection:Toggle({Title="Dead Body ESP", Default=false, Callback=function(v) state.deadBodyESP=v end})
 
 -- Noclip logic
 RunService.Stepped:Connect(function()
     if state.noclip and player.Character then
-        for _, part in ipairs(player.Character:GetDescendants()) do
-            if part:IsA("BasePart") then part.CanCollide = false end
+        for _,p in ipairs(player.Character:GetDescendants()) do
+            if p:IsA("BasePart") then p.CanCollide=false end
         end
     end
 end)
 
 -- ESP Drawing
-local ESPBoxes = {}
-local DeadBodyBoxes = {}
-local DeadBodyTexts = {}
-local notifiedBodies = {}
+local ESPBoxes, DeadBodyBoxes, DeadBodyTexts, notifiedBodies = {}, {}, {}, {}
+local hue=0
+local function getRainbowColor() hue=(hue+1)%360; return Color3.fromHSV(hue/360,1,1) end
 
-local function createESP(plr)
-    if not plr.Character or not plr.Character:FindFirstChild("HumanoidRootPart") then return end
-    local box = Drawing.new("Square")
-    box.Color = Color3.new(1,1,1)
-    box.Thickness = 2
-    box.Filled = false
-    box.Size = Vector2.new(20,20)
-    return box
-end
-
+local function createESPBox() local box=Drawing.new("Square"); box.Thickness=2; box.Filled=false; box.Size=Vector2.new(20,20); return box end
 local function createDeadBodyESP(body)
-    local box = Drawing.new("Square")
-    box.Color = Color3.fromRGB(255,0,0)
-    box.Thickness = 2
-    box.Filled = false
-    box.Size = Vector2.new(30,30)
-    local text = Drawing.new("Text")
-    text.Text = "DEAD BODY"
-    text.Center = true
-    text.Outline = true
-    text.Size = 18
-    return box, text
+    local box=Drawing.new("Square"); box.Color=Color3.fromRGB(255,0,0); box.Thickness=2; box.Filled=false; box.Size=Vector2.new(30,30)
+    local text=Drawing.new("Text"); text.Text="DEAD BODY"; text.Center=true; text.Outline=true; text.Size=18
+    return box,text
 end
 
--- Rainbow function
-local hue = 0
-local function getRainbowColor()
-    hue = (hue + 1) % 360
-    local c = Color3.fromHSV(hue/360,1,1)
-    return c
-end
+-- DeadBody child added
+workspace.ChildAdded:Connect(function(c)
+    if c.Name=="DeadBody" then
+        if state.deadBodyESP then DeadBodyBoxes[c],DeadBodyTexts[c]=createDeadBodyESP(c) end
+        if not notifiedBodies[c] then
+            WindUI:Notify({Title="DEAD BODY!", Content="A dead body has been found!"})
+            notifiedBodies[c]=true
+        end
+    end
+end)
 
+-- ESP render
 RunService.RenderStepped:Connect(function()
-    -- Humanoids ESP
-    for _, plr in ipairs(Players:GetPlayers()) do
-        if plr ~= player and plr.Character and plr.Character:FindFirstChild("HumanoidRootPart") then
+    -- Humanoid ESP
+    for _,plr in ipairs(Players:GetPlayers()) do
+        if plr~=player and plr.Character and plr.Character:FindFirstChild("HumanoidRootPart") then
             if state.esp then
-                if not ESPBoxes[plr] then ESPBoxes[plr] = createESP(plr) end
-                local box = ESPBoxes[plr]
-                local rootPos, onScreen = camera:WorldToViewportPoint(plr.Character.HumanoidRootPart.Position)
+                if not ESPBoxes[plr] then ESPBoxes[plr]=createESPBox() end
+                local box=ESPBoxes[plr]
+                local pos,onScreen=camera:WorldToViewportPoint(plr.Character.HumanoidRootPart.Position)
                 if onScreen then
-                    box.Position = Vector2.new(rootPos.X-10, rootPos.Y-10)
-                    local role = "Neutral"
-                    local ps = plr:FindFirstChild("PublicStates")
-                    if ps and ps:FindFirstChild("Role") then role = ps.Role.Value end
-                    box.Color = ROLE_COLORS[role] or Color3.new(1,1,1)
-                    box.Visible = true
-                else
-                    box.Visible = false
-                end
-            else
-                if ESPBoxes[plr] then ESPBoxes[plr]:Remove() ESPBoxes[plr] = nil end
-            end
-        elseif ESPBoxes[plr] then
-            ESPBoxes[plr]:Remove()
-            ESPBoxes[plr] = nil
+                    box.Position=Vector2.new(pos.X-10,pos.Y-10)
+                    local role="Neutral"
+                    local ps=plr:FindFirstChild("PublicStates")
+                    if ps and ps:FindFirstChild("Role") then role=ps.Role.Value end
+                    box.Color=ROLE_COLORS[role] or Color3.new(1,1,1)
+                    box.Visible=true
+                else box.Visible=false end
+            elseif ESPBoxes[plr] then ESPBoxes[plr]:Remove(); ESPBoxes[plr]=nil end
         end
     end
 
-    -- Dead Body ESP + Rainbow Text + Notification
-    for _, body in ipairs(workspace:GetChildren()) do
-        if body.Name == "DeadBody" then
-            if state.deadBodyESP then
-                if not DeadBodyBoxes[body] then
-                    DeadBodyBoxes[body], DeadBodyTexts[body] = createDeadBodyESP(body)
-                end
-                local box = DeadBodyBoxes[body]
-                local text = DeadBodyTexts[body]
-                local pos, onScreen = camera:WorldToViewportPoint(body.Position + Vector3.new(0,3,0))
-                if onScreen then
-                    box.Position = Vector2.new(pos.X-15,pos.Y-15)
-                    box.Visible = true
-                    text.Position = Vector2.new(pos.X, pos.Y-20)
-                    text.Color = getRainbowColor()
-                    text.Visible = true
-                    -- Notification
-                    if not notifiedBodies[body] then
-                        WindUI:Notify({Title = "DEAD BODY!", Content = "A dead body has been found!"})
-                        notifiedBodies[body] = true
-                    end
-                else
-                    box.Visible = false
-                    text.Visible = false
-                end
-            else
-                if DeadBodyBoxes[body] then DeadBodyBoxes[body]:Remove() DeadBodyBoxes[body] = nil end
-                if DeadBodyTexts[body] then DeadBodyTexts[body]:Remove() DeadBodyTexts[body] = nil end
-            end
+    -- DeadBody ESP + Rainbow Text
+    for body,box in pairs(DeadBodyBoxes) do
+        if body and body.Parent then
+            local pos,onScreen=camera:WorldToViewportPoint(body.Position+Vector3.new(0,3,0))
+            local text=DeadBodyTexts[body]
+            if onScreen then
+                box.Position=Vector2.new(pos.X-15,pos.Y-15); box.Visible=true
+                text.Position=Vector2.new(pos.X,pos.Y-20); text.Visible=true; text.Color=getRainbowColor()
+            else box.Visible=false; text.Visible=false end
         end
     end
 end)
