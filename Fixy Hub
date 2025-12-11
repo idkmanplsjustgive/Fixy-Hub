@@ -1,6 +1,6 @@
 --[[ 
     Lley And Aris Chat Gpt Hub
-    Features: Noclip, Max Zoom, Full Vision, Role View, ESP (Humanoids), Dead Body ESP
+    Features: Noclip, Max Zoom, Full Vision, Role View, ESP (Humanoids), Dead Body ESP + Rainbow Text + Notification
 ]]--
 
 -- Load WindUI
@@ -19,6 +19,7 @@ end
 local Players = game:GetService("Players")
 local RunService = game:GetService("RunService")
 local Lighting = game:GetService("Lighting")
+local TweenService = game:GetService("TweenService")
 local player = Players.LocalPlayer
 local camera = workspace.CurrentCamera
 
@@ -160,6 +161,8 @@ end)
 -- ESP Drawing
 local ESPBoxes = {}
 local DeadBodyBoxes = {}
+local DeadBodyTexts = {}
+local notifiedBodies = {}
 
 local function createESP(plr)
     if not plr.Character or not plr.Character:FindFirstChild("HumanoidRootPart") then return end
@@ -177,7 +180,20 @@ local function createDeadBodyESP(body)
     box.Thickness = 2
     box.Filled = false
     box.Size = Vector2.new(30,30)
-    return box
+    local text = Drawing.new("Text")
+    text.Text = "DEAD BODY"
+    text.Center = true
+    text.Outline = true
+    text.Size = 18
+    return box, text
+end
+
+-- Rainbow function
+local hue = 0
+local function getRainbowColor()
+    hue = (hue + 1) % 360
+    local c = Color3.fromHSV(hue/360,1,1)
+    return c
 end
 
 RunService.RenderStepped:Connect(function()
@@ -207,21 +223,34 @@ RunService.RenderStepped:Connect(function()
         end
     end
 
-    -- Dead Body ESP
+    -- Dead Body ESP + Rainbow Text + Notification
     for _, body in ipairs(workspace:GetChildren()) do
         if body.Name == "DeadBody" then
             if state.deadBodyESP then
-                if not DeadBodyBoxes[body] then DeadBodyBoxes[body] = createDeadBodyESP(body) end
+                if not DeadBodyBoxes[body] then
+                    DeadBodyBoxes[body], DeadBodyTexts[body] = createDeadBodyESP(body)
+                end
                 local box = DeadBodyBoxes[body]
-                local pos, onScreen = camera:WorldToViewportPoint(body.Position)
+                local text = DeadBodyTexts[body]
+                local pos, onScreen = camera:WorldToViewportPoint(body.Position + Vector3.new(0,3,0))
                 if onScreen then
                     box.Position = Vector2.new(pos.X-15,pos.Y-15)
                     box.Visible = true
+                    text.Position = Vector2.new(pos.X, pos.Y-20)
+                    text.Color = getRainbowColor()
+                    text.Visible = true
+                    -- Notification
+                    if not notifiedBodies[body] then
+                        WindUI:Notify({Title = "DEAD BODY!", Content = "A dead body has been found!"})
+                        notifiedBodies[body] = true
+                    end
                 else
                     box.Visible = false
+                    text.Visible = false
                 end
             else
                 if DeadBodyBoxes[body] then DeadBodyBoxes[body]:Remove() DeadBodyBoxes[body] = nil end
+                if DeadBodyTexts[body] then DeadBodyTexts[body]:Remove() DeadBodyTexts[body] = nil end
             end
         end
     end
