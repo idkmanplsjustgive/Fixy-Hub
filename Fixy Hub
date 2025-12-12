@@ -1,50 +1,50 @@
---// Services
+-- Services
 local Players = game:GetService("Players")
 local LocalPlayer = Players.LocalPlayer
 local RunService = game:GetService("RunService")
 local Workspace = game:GetService("Workspace")
 
---// Load Wind GUI
+-- Load Wind
 local Wind = loadstring(game:HttpGet("https://raw.githubusercontent.com/EdgeIY/infiniteyield/master/Wind.lua"))()
-local Hub = Wind:CreateWindow({Name = "Lley And Aris Chat Gpt Hub", ThemeColor = Color3.fromRGB(128,0,128)}) -- purple
+local Hub = Wind:CreateWindow({Name = "Lley And Aris Chat Gpt Hub", ThemeColor = Color3.fromRGB(128,0,128)})
 
---// Tabs
+-- Tabs
 local NoclipTab = Hub:AddTab("Noclip")
 local ESPTab = Hub:AddTab("ESP")
 local GameTab = Hub:AddTab("Game Enhancer")
 
---// Noclip
-local noclipConnection
+-- Noclip
+local noclipEnabled = false
+local noclipConn
 NoclipTab:AddToggle("Enable Noclip", false, function(state)
+    noclipEnabled = state
     if state then
-        noclipConnection = RunService.Stepped:Connect(function()
+        noclipConn = RunService.Stepped:Connect(function()
             if LocalPlayer.Character and LocalPlayer.Character:FindFirstChild("Humanoid") then
-                LocalPlayer.Character.Humanoid:ChangeState(11)
+                LocalPlayer.Character.Humanoid:ChangeState(Enum.HumanoidStateType.Physics)
             end
         end)
     else
-        if noclipConnection then
-            noclipConnection:Disconnect()
-        end
+        if noclipConn then noclipConn:Disconnect() end
     end
 end)
 
---// ESP
+-- ESP
 local ESP_HUMANOID = {}
-local ESPToggle = ESPTab:AddToggle("Humanoid ESP", false, function(state)
-    for player, gui in pairs(ESP_HUMANOID) do
-        if gui then gui.Enabled = state end
+local ESPToggle
+ESPToggle = ESPTab:AddToggle("Humanoid ESP", false, function(state)
+    for _, gui in pairs(ESP_HUMANOID) do
+        gui.Enabled = state
     end
 end)
 
 local function AttachESP(player)
     if not player.Character then return end
-    local humRoot = player.Character:FindFirstChild("HumanoidRootPart")
-    if not humRoot then return end
-
+    local hrp = player.Character:FindFirstChild("HumanoidRootPart")
+    if not hrp then return end
     local Billboard = Instance.new("BillboardGui")
     Billboard.Name = "ESPBillboard"
-    Billboard.Adornee = humRoot
+    Billboard.Adornee = hrp
     Billboard.Size = UDim2.new(0,150,0,40)
     Billboard.AlwaysOnTop = true
     Billboard.Parent = game.CoreGui
@@ -71,10 +71,9 @@ for _, p in pairs(Players:GetPlayers()) do
     if p ~= LocalPlayer then AttachESP(p) end
 end
 
---// Game Enhancer: Role Viewer + Dead Body ESP
+-- Game Enhancer
 local ROLE_TAGS = {}
 local DEAD_BODIES = {}
-
 local ROLE_COLORS = {
     Crewmate = Color3.fromRGB(0,255,0),
     Imposter = Color3.fromRGB(255,0,0),
@@ -83,17 +82,16 @@ local ROLE_COLORS = {
 
 local RoleViewerToggle = GameTab:AddToggle("Role Viewer", false, function(state)
     for _, tag in pairs(ROLE_TAGS) do
-        if tag.Billboard then tag.Billboard.Enabled = state end
+        tag.Billboard.Enabled = state
     end
 end)
 
 local DeadBodyToggle = GameTab:AddToggle("Dead Body ESP", false, function(state)
     for _, body in pairs(DEAD_BODIES) do
-        if body.TextLabel then body.TextLabel.Visible = state end
+        body.Billboard.Enabled = state
     end
 end)
 
--- Role tags above players
 local function AttachRoleTag(player)
     if not player.Character then return end
     local torso = player.Character:FindFirstChild("UpperTorso") or player.Character:FindFirstChild("Torso")
@@ -140,7 +138,6 @@ local function AttachRoleTag(player)
     UpdateRole()
 end
 
--- Dead body ESP
 local function CreateDeadBodyTag(part)
     if DEAD_BODIES[part] then return end
     local Billboard = Instance.new("BillboardGui")
@@ -149,6 +146,7 @@ local function CreateDeadBodyTag(part)
     Billboard.Size = UDim2.new(0,200,0,40)
     Billboard.AlwaysOnTop = true
     Billboard.Parent = game.CoreGui
+    Billboard.Enabled = DeadBodyToggle.Value
 
     local Text = Instance.new("TextLabel")
     Text.Parent = Billboard
@@ -169,7 +167,7 @@ local function CreateDeadBodyTag(part)
     end)
 end
 
--- Monitor dead bodies
+-- Detect dead bodies
 RunService.Heartbeat:Connect(function()
     for _, obj in pairs(Workspace:GetDescendants()) do
         if obj:IsA("Model") and obj.Name == "DeadBody" then
@@ -179,7 +177,7 @@ RunService.Heartbeat:Connect(function()
     end
 end)
 
--- Hooks for players
+-- Hooks
 Players.PlayerAdded:Connect(function(player)
     player.CharacterAdded:Connect(function()
         AttachRoleTag(player)
