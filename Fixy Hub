@@ -1,156 +1,231 @@
--- All-in-One Wind GUI Script for Roblox
+--// Services
 local Players = game:GetService("Players")
 local LocalPlayer = Players.LocalPlayer
 local RunService = game:GetService("RunService")
 local UserInputService = game:GetService("UserInputService")
+local TweenService = game:GetService("TweenService")
 local Workspace = game:GetService("Workspace")
 
--- GUI Setup (Wind style)
-local Library = loadstring(game:HttpGet("https://raw.githubusercontent.com/Roblox/Wind/main/Source.lua"))()
-local Window = Library:CreateWindow("Lley And Aris Chat GPT Hub", Color3.fromRGB(128,0,128), Enum.KeyCode.RightShift)
+--// Configuration
+local GUI_COLOR = Color3.fromRGB(128, 0, 128) -- Purple
+local ESP_HUMANOID = {}
+local DEAD_BODIES = {}
+local ROLE_TAGS = {}
 
--- Feature States
-local NoclipEnabled = false
-local ESPEnabled = false
-local FullVisionEnabled = false
-local MaxZoomEnabled = false
-local RoleViewerEnabled = false
-local DeadBodyESPEnabled = false
+--// Wind GUI Setup
+local Wind = loadstring(game:HttpGet("https://raw.githubusercontent.com/EdgeIY/infiniteyield/master/Wind.lua"))()
+local Hub = Wind:CreateWindow({Name = "Lley And Aris Chat Gpt Hub", ThemeColor = GUI_COLOR})
 
--- Tabs
-local NoclipTab = Window:AddTab("Noclip")
-local ESPTab = Window:AddTab("ESP")
-local EnhancerTab = Window:AddTab("Game Enhancer")
-
--- Noclip Tab
-NoclipTab:AddToggle("Enable Noclip", function(state)
-    NoclipEnabled = state
-    if NoclipEnabled then
-        -- Noclip Loop
-        spawn(function()
-            while NoclipEnabled and LocalPlayer.Character and LocalPlayer.Character:FindFirstChild("Humanoid") do
-                LocalPlayer.Character.Humanoid:ChangeState(Enum.HumanoidStateType.Physics)
-                RunService.Heartbeat:Wait()
+--// Noclip Tab
+local NoclipTab = Hub:AddTab("Noclip")
+local NoclipToggle = NoclipTab:AddToggle("Enable Noclip", false, function(state)
+    if state then
+        local connection
+        connection = RunService.Stepped:Connect(function()
+            if LocalPlayer.Character and LocalPlayer.Character:FindFirstChild("Humanoid") then
+                LocalPlayer.Character.Humanoid:ChangeState(11) -- Noclip
             end
         end)
-    end
-end)
-
--- ESP Tab
-ESPTab:AddToggle("Humanoid ESP", function(state)
-    ESPEnabled = state
-end)
-
--- Game Enhancer Tab
-EnhancerTab:AddToggle("Full Vision", function(state)
-    FullVisionEnabled = state
-    if FullVisionEnabled then
-        for _, part in ipairs(Workspace:GetDescendants()) do
-            if part:IsA("BasePart") then
-                part.LocalTransparencyModifier = 0
-            end
-        end
-    end
-end)
-
-EnhancerTab:AddToggle("Max Zoom", function(state)
-    MaxZoomEnabled = state
-    if MaxZoomEnabled then
-        LocalPlayer.CameraMaxZoomDistance = 1000
+        NoclipToggle.Connection = connection
     else
-        LocalPlayer.CameraMaxZoomDistance = 128
+        if NoclipToggle.Connection then
+            NoclipToggle.Connection:Disconnect()
+        end
     end
 end)
 
-EnhancerTab:AddToggle("Role Viewer", function(state)
-    RoleViewerEnabled = state
+--// ESP Tab
+local ESPTab = Hub:AddTab("ESP")
+local ESPToggle = ESPTab:AddToggle("Humanoid ESP", false, function(state)
+    for player, gui in pairs(ESP_HUMANOID) do
+        if gui and gui.Parent then
+            gui.Enabled = state
+        end
+    end
 end)
 
-EnhancerTab:AddToggle("Dead Body ESP", function(state)
-    DeadBodyESPEnabled = state
+-- Function to attach ESP to humanoid
+local function AttachESP(player)
+    local char = player.Character
+    if not char then return end
+    local hum = char:FindFirstChild("HumanoidRootPart")
+    if not hum then return end
+    
+    local Billboard = Instance.new("BillboardGui")
+    Billboard.Name = "ESPBillboard"
+    Billboard.Parent = game.CoreGui
+    Billboard.Adornee = hum
+    Billboard.Size = UDim2.new(0,150,0,40)
+    Billboard.AlwaysOnTop = true
+
+    local Text = Instance.new("TextLabel")
+    Text.Parent = Billboard
+    Text.Size = UDim2.new(1,0,1,0)
+    Text.BackgroundTransparency = 1
+    Text.TextScaled = true
+    Text.Text = player.Name
+    Text.TextColor3 = Color3.fromRGB(255,255,255)
+
+    ESP_HUMANOID[player] = Billboard
+end
+
+Players.PlayerAdded:Connect(function(player)
+    player.CharacterAdded:Connect(function()
+        if ESPToggle.Value then
+            AttachESP(player)
+        end
+    end)
 end)
 
--- Function to add Billboard ESP
-local function AddBillboard(target, text, color, rainbow)
-    if not target or not target:IsA("BasePart") then return end
-    local tag = target:FindFirstChild("ESPTag")
-    if tag then tag:Destroy() end
-
-    local billboard = Instance.new("BillboardGui")
-    billboard.Name = "ESPTag"
-    billboard.Parent = target
-    billboard.Adornee = target
-    billboard.Size = UDim2.new(5,0,2,0)
-    billboard.StudsOffset = Vector3.new(0,2.5,0)
-    billboard.AlwaysOnTop = true
-
-    local label = Instance.new("TextLabel")
-    label.Parent = billboard
-    label.BackgroundTransparency = 1
-    label.Text = text
-    label.TextScaled = true
-    label.TextStrokeTransparency = 0.25
-    label.TextColor3 = color or Color3.new(1,1,1)
-
-    if rainbow then
-        spawn(function()
-            local hue = 0
-            while rainbow and label.Parent do
-                hue = (hue + 0.01) % 1
-                label.TextColor3 = Color3.fromHSV(hue,1,1)
-                RunService.Heartbeat:Wait()
-            end
-        end)
+for _, player in ipairs(Players:GetPlayers()) do
+    if player ~= LocalPlayer then
+        if ESPToggle.Value then
+            AttachESP(player)
+        end
     end
 end
 
--- Dead Body Notification
-local function DeadBodyNotification(playerName)
-    local msg = Instance.new("Message")
-    msg.Parent = Workspace
-    msg.Text = "DEAD BODY!"
-    delay(2, function() msg:Destroy() end)
+--// Game Enhancer Tab
+local GameTab = Hub:AddTab("Game Enhancer")
+
+-- Full Vision Toggle
+GameTab:AddToggle("Full Vision", false, function(state)
+    Workspace.CurrentCamera:GetChildren()
+    for _, obj in pairs(Workspace:GetDescendants()) do
+        if obj:IsA("BasePart") and obj.Name ~= "Terrain" then
+            obj.Transparency = state and 0 or 0
+        end
+    end
+end)
+
+-- Max Zoom Toggle
+GameTab:AddToggle("Max Zoom", false, function(state)
+    Workspace.CurrentCamera.CameraSubject = LocalPlayer.Character
+    Workspace.CurrentCamera.CameraType = Enum.CameraType.Custom
+    Workspace.CurrentCamera.CameraMaxZoomDistance = state and 400 or 16
+end)
+
+-- Dead Body ESP
+local DeadBodyToggle = GameTab:AddToggle("Dead Body ESP", false, function(state)
+    for _, body in pairs(DEAD_BODIES) do
+        if body.TextLabel then
+            body.TextLabel.Visible = state
+        end
+    end
+end)
+
+local function CreateDeadBodyTag(part)
+    if DEAD_BODIES[part] then return end
+    local Billboard = Instance.new("BillboardGui")
+    Billboard.Name = "DeadBodyTag"
+    Billboard.Parent = game.CoreGui
+    Billboard.Adornee = part
+    Billboard.Size = UDim2.new(0,200,0,40)
+    Billboard.AlwaysOnTop = true
+
+    local Text = Instance.new("TextLabel")
+    Text.Parent = Billboard
+    Text.Size = UDim2.new(1,0,1,0)
+    Text.BackgroundTransparency = 1
+    Text.TextScaled = true
+    Text.Text = "DEAD BODY!"
+    DEAD_BODIES[part] = {Billboard = Billboard, TextLabel = Text}
+
+    -- Rainbow effect
+    spawn(function()
+        while true do
+            for i=0,1,0.01 do
+                Text.TextColor3 = Color3.fromHSV(i,1,1)
+                wait(0.05)
+            end
+        end
+    end)
+
+    -- Notification
+    local notif = Wind:Notification({Title = "DEAD BODY!", Message = "A dead body appeared!", Duration = 3})
 end
 
--- ESP Loop
-spawn(function()
-    while true do
-        RunService.RenderStepped:Wait()
-        if ESPEnabled then
-            for _, plr in pairs(Players:GetPlayers()) do
-                if plr ~= LocalPlayer and plr.Character and plr.Character:FindFirstChild("HumanoidRootPart") then
-                    AddBillboard(plr.Character.HumanoidRootPart, plr.Name, Color3.fromRGB(0,255,0))
-                end
-            end
-        end
-
-        if RoleViewerEnabled then
-            for _, plr in pairs(Players:GetPlayers()) do
-                if plr.Character and plr:FindFirstChild("PublicStates") then
-                    local ps = plr.PublicStates
-                    local roleVal = ps:FindFirstChild("Role")
-                    local subRoleVal = ps:FindFirstChild("SubRole")
-                    local color = Color3.fromRGB(255,255,255)
-                    if roleVal then
-                        if roleVal.Value == "Imposter" then color = Color3.fromRGB(255,0,0)
-                        elseif roleVal.Value == "Neutral" then color = Color3.fromRGB(255,165,0)
-                        elseif roleVal.Value == "Crewmate" then color = Color3.fromRGB(0,255,0) end
-                    end
-                    if plr.Character:FindFirstChild("HumanoidRootPart") then
-                        local text = plr.Name .. " | " .. (roleVal and roleVal.Value or "") .. " | " .. (subRoleVal and subRoleVal.Value or "")
-                        AddBillboard(plr.Character.HumanoidRootPart, text, color)
-                    end
-                end
-            end
-        end
-
-        if DeadBodyESPEnabled then
-            for _, obj in pairs(Workspace:GetDescendants()) do
-                if obj.Name == "DeadBody" and obj:IsA("BasePart") then
-                    AddBillboard(obj, "DEAD BODY", nil, true)
-                    DeadBodyNotification(obj.Name)
-                end
+-- Monitor dead bodies
+RunService.Heartbeat:Connect(function()
+    for _, obj in pairs(Workspace:GetDescendants()) do
+        if obj:IsA("Model") and obj.Name == "DeadBody" then
+            if obj:FindFirstChild("HumanoidRootPart") then
+                CreateDeadBodyTag(obj.HumanoidRootPart)
             end
         end
     end
 end)
+
+-- Role Viewer
+local RoleViewerToggle = GameTab:AddToggle("Role Viewer", false, function(state)
+    for player, tag in pairs(ROLE_TAGS) do
+        if tag and tag.Billboard then
+            tag.Billboard.Enabled = state
+        end
+    end
+end)
+
+local ROLE_COLORS = {
+    Crewmate = Color3.fromRGB(0,255,0),
+    Imposter = Color3.fromRGB(255,0,0),
+    Neutral = Color3.fromRGB(255,165,0)
+}
+
+local function AttachRoleTag(player)
+    local char = player.Character
+    if not char then return end
+    local torso = char:FindFirstChild("UpperTorso") or char:FindFirstChild("Torso")
+    if not torso then return end
+
+    local Billboard = Instance.new("BillboardGui")
+    Billboard.Name = "RoleTag"
+    Billboard.Adornee = torso
+    Billboard.Size = UDim2.new(0,150,0,50)
+    Billboard.AlwaysOnTop = true
+    Billboard.Parent = game.CoreGui
+    Billboard.Enabled = RoleViewerToggle.Value
+
+    local Text = Instance.new("TextLabel")
+    Text.Parent = Billboard
+    Text.Size = UDim2.new(1,0,1,0)
+    Text.BackgroundTransparency = 1
+    Text.TextScaled = true
+    Text.Font = Enum.Font.GothamBold
+    Text.TextStrokeTransparency = 0.25
+    Text.Text = ""
+    Text.TextColor3 = Color3.fromRGB(255,255,255)
+
+    ROLE_TAGS[player] = {Billboard = Billboard, Text = Text}
+
+    local function UpdateRole()
+        local ps = player:FindFirstChild("PublicStates")
+        if ps then
+            local roleVal = ps:FindFirstChild("Role")
+            if roleVal then
+                Text.Text = roleVal.Value
+                Text.TextColor3 = ROLE_COLORS[roleVal.Value] or Color3.new(1,1,1)
+            end
+        end
+    end
+
+    if player:FindFirstChild("PublicStates") then
+        for _, v in pairs(player.PublicStates:GetChildren()) do
+            if v:IsA("StringValue") then
+                v.Changed:Connect(UpdateRole)
+            end
+        end
+    end
+    UpdateRole()
+end
+
+Players.PlayerAdded:Connect(function(player)
+    player.CharacterAdded:Connect(function()
+        AttachRoleTag(player)
+    end)
+end)
+
+for _, player in ipairs(Players:GetPlayers()) do
+    if player ~= LocalPlayer then
+        AttachRoleTag(player)
+    end
+end
