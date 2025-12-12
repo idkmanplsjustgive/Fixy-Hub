@@ -8,13 +8,12 @@ local ReplicatedStorage = game:GetService("ReplicatedStorage")
 
 -- Load WindUI
 local WindUI = loadstring(game:HttpGet("https://github.com/Footagesus/WindUI/releases/latest/download/main.lua"))()
-local Hub = WindUI:CreateWindow("Lley And Aris Chat GPT Hub", Color3.fromRGB(128, 0, 128))
+local Hub = WindUI:CreateWindow("Lley And Aris Chat Gpt Hub", Color3.fromRGB(128,0,128))
 
 -- Tabs
 local NoclipTab = Hub:CreateTab("Noclip")
 local ESPTab = Hub:CreateTab("ESP")
 local GameTab = Hub:CreateTab("Game Enhancer")
-local RoleTab = Hub:CreateTab("Role Viewer")
 
 -- ===========================
 -- Noclip
@@ -42,20 +41,17 @@ local espBoxes = {}
 
 local function createESP(player)
     if espBoxes[player] then return end
-    local humanoidRootPart = player.Character and player.Character:FindFirstChild("HumanoidRootPart")
-    if not humanoidRootPart then return end
-
     local billboard = Instance.new("BillboardGui")
     billboard.Name = "ESPBox"
-    billboard.Adornee = humanoidRootPart
-    billboard.Size = UDim2.new(0, 100, 0, 50)
+    billboard.Adornee = player.Character:FindFirstChild("HumanoidRootPart")
+    billboard.Size = UDim2.new(0,100,0,50)
     billboard.AlwaysOnTop = true
-    billboard.Parent = humanoidRootPart
+    billboard.Parent = player.Character:FindFirstChild("HumanoidRootPart")
 
     local label = Instance.new("TextLabel")
-    label.Size = UDim2.new(1, 0, 1, 0)
+    label.Size = UDim2.new(1,0,1,0)
     label.BackgroundTransparency = 1
-    label.TextColor3 = Color3.fromRGB(255, 255, 255)
+    label.TextColor3 = Color3.fromRGB(255,255,255)
     label.TextScaled = true
     label.Font = Enum.Font.GothamBold
     label.Text = player.Name
@@ -95,13 +91,48 @@ end)
 Players.PlayerRemoving:Connect(removeESP)
 
 -- ===========================
--- Role Viewer (For Impostors & Crewmates)
+-- Game Enhancer
+-- ===========================
+-- Full Vision
+local fullVisionEnabled = false
+GameTab:AddToggle("Full Vision", false, function(state)
+    fullVisionEnabled = state
+    if state then
+        for _, part in pairs(Workspace:GetDescendants()) do
+            if part:IsA("BasePart") then
+                part.LocalTransparencyModifier = 0
+            end
+        end
+    else
+        for _, part in pairs(Workspace:GetDescendants()) do
+            if part:IsA("BasePart") then
+                part.LocalTransparencyModifier = 1
+            end
+        end
+    end
+end)
+
+-- Max Zoom
+local maxZoomEnabled = false
+GameTab:AddToggle("Max Zoom", false, function(state)
+    maxZoomEnabled = state
+    if state then
+        game.Workspace.CurrentCamera.CameraSubject = LocalPlayer.Character:FindFirstChild("Humanoid")
+        game.Workspace.CurrentCamera.CameraType = Enum.CameraType.Custom
+        game.Workspace.CurrentCamera.FieldOfView = 120
+    else
+        game.Workspace.CurrentCamera.FieldOfView = 70
+    end
+end)
+
+-- ===========================
+-- Role Viewer
 -- ===========================
 local roleViewEnabled = false
 local ROLE_COLORS = {
-    Crewmate = Color3.fromRGB(0, 255, 0),
-    Imposter = Color3.fromRGB(255, 0, 0),
-    Neutral = Color3.fromRGB(255, 165, 0)
+    Crewmate = Color3.fromRGB(0,255,0),
+    Imposter = Color3.fromRGB(255,0,0),
+    Neutral = Color3.fromRGB(255,165,0)
 }
 
 local function attachRoleTag(player)
@@ -117,33 +148,31 @@ local function attachRoleTag(player)
     billboard.Name = "RoleTag"
     billboard.Parent = root
     billboard.Adornee = root
-    billboard.Size = UDim2.new(2, 0, 1, 0)
-    billboard.StudsOffset = Vector3.new(0, 3, 0)
+    billboard.Size = UDim2.new(2,0,1,0)
+    billboard.StudsOffset = Vector3.new(0,3,0)
     billboard.AlwaysOnTop = true
 
     local label = Instance.new("TextLabel")
-    label.Size = UDim2.new(1, 0, 1, 0)
+    label.Size = UDim2.new(1,0,1,0)
     label.BackgroundTransparency = 1
     label.Font = Enum.Font.GothamBold
     label.TextScaled = true
     label.TextStrokeTransparency = 0.25
-    label.TextColor3 = Color3.fromRGB(255, 255, 255)
+    label.TextColor3 = Color3.fromRGB(255,255,255)
     label.Parent = billboard
 
     local function updateRoleTag()
-        -- You may need to adjust this depending on the exact way the game stores role info.
         if player:FindFirstChild("PublicStates") then
             local roleVal = player.PublicStates:FindFirstChild("Role")
             local subRoleVal = player.PublicStates:FindFirstChild("SubRole")
             local roleText = roleVal and roleVal.Value or ""
             local subText = subRoleVal and subRoleVal.Value or ""
             label.Text = string.format("%s | %s | %s", player.Name, roleText, subText)
-            label.TextColor3 = ROLE_COLORS[roleText] or Color3.fromRGB(255, 255, 255)
+            label.TextColor3 = ROLE_COLORS[roleText] or Color3.fromRGB(255,255,255)
         end
     end
     updateRoleTag()
 
-    -- Listen for changes in roles
     if player:FindFirstChild("PublicStates") then
         for _, v in pairs(player.PublicStates:GetChildren()) do
             if v:IsA("StringValue") then
@@ -153,7 +182,7 @@ local function attachRoleTag(player)
     end
 end
 
-RoleTab:AddToggle("Enable Role Viewer", false, function(state)
+GameTab:AddToggle("Enable Role Viewer", false, function(state)
     roleViewEnabled = state
     if state then
         for _, player in pairs(Players:GetPlayers()) do
@@ -193,17 +222,17 @@ local function createDeadBodyESP(model)
     billboard.Name = "DeadBodyESP"
     billboard.Parent = root
     billboard.Adornee = root
-    billboard.Size = UDim2.new(2, 0, 1, 0)
-    billboard.StudsOffset = Vector3.new(0, 3, 0)
+    billboard.Size = UDim2.new(2,0,1,0)
+    billboard.StudsOffset = Vector3.new(0,3,0)
     billboard.AlwaysOnTop = true
 
     local label = Instance.new("TextLabel")
-    label.Size = UDim2.new(1, 0, 1, 0)
+    label.Size = UDim2.new(1,0,1,0)
     label.BackgroundTransparency = 1
     label.Font = Enum.Font.GothamBold
     label.TextScaled = true
     label.TextStrokeTransparency = 0.25
-    label.TextColor3 = Color3.fromHSV(0, 1, 1)
+    label.TextColor3 = Color3.fromHSV(0,1,1)
     label.Parent = billboard
 
     deadBodies[model] = label
@@ -223,4 +252,15 @@ end)
 
 Workspace.ChildAdded:Connect(function(child)
     if deadBodyEnabled and child.Name == "DeadBody" then
-        create
+        createDeadBodyESP(child)
+    end
+end)
+
+-- Rainbow animation for dead body text
+RunService.RenderStepped:Connect(function()
+    for _, label in pairs(deadBodies) do
+        local hue = tick()%6 / 6
+        label.TextColor3 = Color3.fromHSV(hue,1,1)
+    end
+end)
+```
