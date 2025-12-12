@@ -1,471 +1,275 @@
 --[[ 
-    FINAL: Lley And Aris Chat Gpt Hub (All-in-one Luau LocalScript)
-    Features:
-      - WindUI purple hub (Open Button: "Lley And Aris Chat Gpt Hub")
-      - Noclip
-      - ESP (Humanoids Only)
-      - Role View (external loader) with smaller text
-      - Game Enhancer: Full Vision, Max Zoom
-      - Dead Body ESP (bodies stay), rainbow text, Roblox-style top-right notification
+    Lley And Aris Chat Gpt Hub (All-in-one Luau LocalScript)
+    ✔ Purple WindUI Hub
+    ✔ Noclip
+    ✔ ESP (Humanoids Only) WITH USERNAMES (small text)
+    ✔ Game Enhancer (Full Vision, Max Zoom)
+    ✔ Dead Body ESP (rainbow text + notification)
+    ✘ Role View (REMOVED)
 ]]--
 
--- ======= Services & Setup =======
+-- ======= Services =======
 local Players = game:GetService("Players")
 local RunService = game:GetService("RunService")
 local Lighting = game:GetService("Lighting")
 local TweenService = game:GetService("TweenService")
 local Workspace = game:GetService("Workspace")
-local HttpService = game:GetService("HttpService")
 local player = Players.LocalPlayer
-if not player then return end
 local camera = Workspace.CurrentCamera
 
--- Attempt to access Drawing (some environments restrict it)
-local canUseDrawing, Drawing = pcall(function() return Drawing end)
-if not canUseDrawing then Drawing = nil end
+-- Attempt Drawing API
+local ok, Drawing = pcall(function() return Drawing end)
+if not ok then Drawing = nil end
 
--- ======= Load WindUI =======
+-- ==== Load WindUI ====
 local WindUI
 do
-    local ok, result = pcall(function() return require("./src/Init") end)
-    if ok and result then
-        WindUI = result
-    else
-        WindUI = loadstring(game:HttpGet("https://raw.githubusercontent.com/Footagesus/WindUI/main/dist/main.lua"))()
-    end
+    local s, result = pcall(function() return require("./src/Init") end)
+    WindUI = s and result or loadstring(game:HttpGet("https://raw.githubusercontent.com/Footagesus/WindUI/main/dist/main.lua"))()
 end
 
--- ======= State =======
+-- ======= Runtime State =======
 local state = {
     noclip = false,
+    esp = false,
     maxZoom = false,
     fullVision = false,
-    roleView = false,
-    esp = false,
     deadBodyESP = false,
 }
-local oldCameraMaxZoom = player.CameraMaxZoomDistance
-local oldLighting = { FogStart = Lighting.FogStart, FogEnd = Lighting.FogEnd, Ambient = Lighting.Ambient }
 
-local ROLE_COLORS = {
-    Crewmate = Color3.fromRGB(0,255,0),
-    Imposter = Color3.fromRGB(255,0,0),
-    Neutral  = Color3.fromRGB(255,165,0),
+local oldZoom = player.CameraMaxZoomDistance
+local oldLight = {
+    FogStart = Lighting.FogStart,
+    FogEnd = Lighting.FogEnd,
+    Ambient = Lighting.Ambient,
 }
 
--- storage
-local ESPBoxes = {}         -- player -> {Box = Drawing Square, Text = Drawing Text}
-local DeadBodyBoxes = {}    -- body -> Drawing Square
-local DeadBodyTexts = {}    -- body -> Drawing Text
-local notifiedBodies = {}   -- body -> true
+local ESPStorage = {}
+local BodyBOX = {}
+local BodyTEXT = {}
+local notified = {}
 local hue = 0
 
--- helper rainbow
-local function getRainbowColor()
+local function rainbow()
     hue = (hue + 1) % 360
     return Color3.fromHSV(hue/360, 1, 1)
 end
 
--- ======= UI: WindUI Window & Purple Theme =======
-local Window = WindUI:CreateWindow({
-    Title = "Lley And Aris Chat Gpt Hub",
-    Folder = "ChatGPTArisHub",
-    Icon = "",
-    OpenButton = {
-        Title = "Lley And Aris Chat Gpt Hub",
-        Enabled = true,
-        Draggable = true,
-        Color = ColorSequence.new(Color3.fromRGB(128,0,128), Color3.fromRGB(200,100,255)),
-    },
-})
+-- ======= Create Drawing safely =======
+local function newBox()
+    if not Drawing then return nil end
+    local b = Drawing.new("Square")
+    b.Color = Color3.fromRGB(255,255,255)
+    b.Thickness = 2
+    b.Filled = false
+    b.Size = Vector2.new(25,25)
+    b.Visible = false
+    return b
+end
 
-WindUI:AddTheme({
-    Name = "PurpleTheme",
-    Accent = Color3.fromRGB(128,0,128),
-    Dialog = Color3.fromRGB(30,0,60),
-    Outline = Color3.fromRGB(128,0,128),
-    Text = Color3.fromRGB(255,255,255),
-    Placeholder = Color3.fromRGB(180,180,180),
-    Button = Color3.fromRGB(80,0,120),
-    Icon = Color3.fromRGB(200,100,255),
-    WindowBackground = Color3.fromRGB(20,0,40),
-    TopbarButtonIcon = Color3.fromRGB(200,100,255),
-    TopbarTitle = Color3.fromRGB(255,255,255),
-    TabBackground = Color3.fromRGB(40,0,80),
-    ElementBackground = Color3.fromRGB(50,0,100),
-})
-WindUI:SetTheme("PurpleTheme")
+local function newText(size)
+    if not Drawing then return nil end
+    local t = Drawing.new("Text")
+    t.Size = size
+    t.Center = true
+    t.Outline = true
+    t.Color = Color3.fromRGB(255,255,255)
+    t.Text = ""
+    t.Visible = false
+    return t
+end
 
--- ======= Main Tab layout (Noclip / ESP / Game Enhancer) =======
-local MainTab = Window:Tab({ Title = "Main", Icon = "solar:check-square-bold" })
-
--- Noclip Section
-local NoclipSection = MainTab:Section({ Title = "Noclip" })
-NoclipSection:Toggle({
-    Title = "Enable Noclip",
-    Default = false,
-    Callback = function(v) state.noclip = v end
-})
-
--- ESP Section (Role View + ESP Humanoids)
-local ESPSection = MainTab:Section({ Title = "ESP" })
-ESPSection:Toggle({
-    Title = "Role View",
-    Default = false,
-    Callback = function(v)
-        state.roleView = v
-        if v then
-            -- load external role script then shrink its role tags
-            task.spawn(function()
-                local ok, res = pcall(function()
-                    return loadstring(game:HttpGet("https://raw.githubusercontent.com/mehCake/Roblox-Imposters-and-roles-script/refs/heads/main/Script.txt"))()
-                end)
-                -- after a short delay, shrink existing tags
-                task.wait(0.4)
-                local function shrinkAllTags()
-                    for _, plr in ipairs(Players:GetPlayers()) do
-                        local char = plr.Character
-                        if char then
-                            local torso = char:FindFirstChild("UpperTorso") or char:FindFirstChild("Torso")
-                            if torso then
-                                local tag = torso:FindFirstChild("RoleTag")
-                                if tag then
-                                    local roleText = tag:FindFirstChild("RoleText")
-                                    local subText = tag:FindFirstChild("SubRoleText")
-                                    if roleText then
-                                        roleText.TextScaled = false
-                                        roleText.TextSize = 12
-                                    end
-                                    if subText then
-                                        subText.TextScaled = false
-                                        subText.TextSize = 10
-                                    end
-                                end
-                            end
-                        end
-                    end
-                end
-                shrinkAllTags()
-                -- ensure future tags are shrunk when characters spawn
-                Players.PlayerAdded:Connect(function(pl)
-                    pl.CharacterAdded:Connect(function()
-                        task.wait(0.3)
-                        shrinkAllTags()
-                    end)
-                end)
-                -- also hook existing players' CharacterAdded
-                for _, pl in ipairs(Players:GetPlayers()) do
-                    pl.CharacterAdded:Connect(function()
-                        task.wait(0.3)
-                        shrinkAllTags()
-                    end)
-                end
-            end)
-        else
-            -- remove tags created by the external script
-            for _, plr in ipairs(Players:GetPlayers()) do
-                if plr.Character then
-                    for _, c in ipairs(plr.Character:GetDescendants()) do
-                        if c.Name == "RoleTag" then
-                            pcall(function() c:Destroy() end)
-                        end
-                    end
-                end
-            end
-        end
-    end
-})
-ESPSection:Toggle({
-    Title = "ESP (Humanoids Only)",
-    Default = false,
-    Callback = function(v) state.esp = v end
-})
-
--- Game Enhancer Section
-local GameEnhancerSection = MainTab:Section({ Title = "Game Enhancer" })
-GameEnhancerSection:Toggle({
-    Title = "Full Vision",
-    Default = false,
-    Callback = function(v)
-        state.fullVision = v
-        if v then
-            Lighting.FogStart = 0
-            Lighting.FogEnd = 100000
-            Lighting.Ambient = Color3.fromRGB(255,255,255)
-        else
-            Lighting.FogStart = oldLighting.FogStart
-            Lighting.FogEnd = oldLighting.FogEnd
-            Lighting.Ambient = oldLighting.Ambient
-        end
-    end
-})
-GameEnhancerSection:Toggle({
-    Title = "Max Zoom",
-    Default = false,
-    Callback = function(v)
-        state.maxZoom = v
-        player.CameraMaxZoomDistance = v and 1000 or oldCameraMaxZoom
-    end
-})
-GameEnhancerSection:Toggle({
-    Title = "Dead Body ESP",
-    Default = false,
-    Callback = function(v) state.deadBodyESP = v end
-})
-
--- ======= Helper: Roblox-style top-right notification =======
-local function ShowNotification(title, msg)
+-- ======= Notification UI =======
+local function notify(title)
     local gui = Instance.new("ScreenGui")
-    gui.Name = "Aris_DeadBodyNotif"
     gui.Parent = player:WaitForChild("PlayerGui")
     gui.ResetOnSpawn = false
 
     local frame = Instance.new("Frame")
     frame.Parent = gui
-    frame.Size = UDim2.new(0, 280, 0, 60)
-    frame.Position = UDim2.new(1, 300, 0, 80) -- start offscreen right
-    frame.BackgroundColor3 = Color3.fromRGB(200, 50, 50)
+    frame.Size = UDim2.new(0, 260, 0, 60)
+    frame.Position = UDim2.new(1, 260, 0, 100)
+    frame.BackgroundColor3 = Color3.fromRGB(200,0,0)
     frame.BorderSizePixel = 0
-    frame.ClipsDescendants = true
-    local uc = Instance.new("UICorner", frame)
-    uc.CornerRadius = UDim.new(0, 10)
+    Instance.new("UICorner", frame).CornerRadius = UDim.new(0,10)
 
-    local titleLabel = Instance.new("TextLabel", frame)
-    titleLabel.Size = UDim2.new(1, -12, 0, 24)
-    titleLabel.Position = UDim2.new(0, 8, 0, 6)
-    titleLabel.BackgroundTransparency = 1
-    titleLabel.Font = Enum.Font.GothamBold
-    titleLabel.TextSize = 18
-    titleLabel.TextColor3 = Color3.new(1,1,1)
-    titleLabel.TextXAlignment = Enum.TextXAlignment.Left
-    titleLabel.Text = title
+    local txt = Instance.new("TextLabel", frame)
+    txt.Size = UDim2.new(1, -10, 1, 0)
+    txt.Position = UDim2.new(0,5,0,0)
+    txt.BackgroundTransparency = 1
+    txt.Font = Enum.Font.GothamBold
+    txt.TextSize = 20
+    txt.Text = title
+    txt.TextColor3 = Color3.new(1,1,1)
+    txt.TextXAlignment = Enum.TextXAlignment.Left
 
-    local msgLabel = Instance.new("TextLabel", frame)
-    msgLabel.Size = UDim2.new(1, -12, 0, 22)
-    msgLabel.Position = UDim2.new(0, 8, 0, 30)
-    msgLabel.BackgroundTransparency = 1
-    msgLabel.Font = Enum.Font.Gotham
-    msgLabel.TextSize = 14
-    msgLabel.TextColor3 = Color3.new(1,1,1)
-    msgLabel.TextXAlignment = Enum.TextXAlignment.Left
-    msgLabel.Text = msg
+    TweenService:Create(frame, TweenInfo.new(0.3),{
+        Position = UDim2.new(1, -270, 0, 100)
+    }):Play()
 
-    -- Slide in
-    local tweenIn = TweenService:Create(frame, TweenInfo.new(0.35, Enum.EasingStyle.Quad, Enum.EasingDirection.Out), { Position = UDim2.new(1, -300, 0, 80) })
-    tweenIn:Play()
-    tweenIn.Completed:Wait()
-    task.delay(3, function()
-        local tweenOut = TweenService:Create(frame, TweenInfo.new(0.35, Enum.EasingStyle.Quad, Enum.EasingDirection.In), { Position = UDim2.new(1, 300, 0, 80) })
-        tweenOut:Play()
-        tweenOut.Completed:Wait()
-        pcall(function() gui:Destroy() end)
+    task.delay(3,function()
+        TweenService:Create(frame, TweenInfo.new(0.3),{
+            Position = UDim2.new(1, 260, 0, 100)
+        }):Play()
+        task.delay(0.3,function()
+            gui:Destroy()
+        end)
     end)
 end
 
--- ======= Utility to create Drawing elements safely =======
-local function safeCreateSquare(color, size)
-    if not Drawing then return nil end
-    local sq = Drawing.new("Square")
-    sq.Color = color
-    sq.Thickness = 2
-    sq.Filled = false
-    sq.Size = size or Vector2.new(20,20)
-    sq.Visible = false
-    return sq
-end
-local function safeCreateText(txt, size)
-    if not Drawing then return nil end
-    local t = Drawing.new("Text")
-    t.Text = txt or ""
-    t.Size = size or 14
-    t.Center = true
-    t.Outline = true
-    t.Color = Color3.new(1,1,1)
-    t.Visible = false
-    return t
-end
+-- ======= WindUI Window =======
+local Window = WindUI:CreateWindow({
+    Title = "Lley And Aris Chat Gpt Hub",
+    Folder = "GPT_Aris",
+    OpenButton = {
+        Title = "Lley And Aris Chat Gpt Hub",
+        Enabled = true,
+        Draggable = true,
+        Color = ColorSequence.new(Color3.fromRGB(128,0,128), Color3.fromRGB(200,100,255))
+    }
+})
 
--- ======= Noclip enforcement (local character only) =======
+WindUI:AddTheme({
+    Name = "PurpleTheme",
+    Accent = Color3.fromRGB(128,0,128),
+    WindowBackground = Color3.fromRGB(20,0,40),
+    Text = Color3.new(1,1,1),
+})
+WindUI:SetTheme("PurpleTheme")
+
+local main = Window:Tab({ Title="Main", Icon="solar:check-square-bold" })
+
+-- ========== Noclip ============
+local secN = main:Section({Title="Noclip"})
+secN:Toggle({
+    Title="Enable Noclip",
+    Callback=function(v)
+        state.noclip = v
+    end
+})
+
+-- ========== ESP ============
+local secE = main:Section({Title="ESP"})
+secE:Toggle({
+    Title="ESP (Humanoids Only)",
+    Callback=function(v)
+        state.esp = v
+    end
+})
+
+-- ========== Game Enhancer ============
+local secG = main:Section({Title="Game Enhancer"})
+secG:Toggle({
+    Title="Full Vision",
+    Callback=function(v)
+        state.fullVision = v
+        if v then
+            Lighting.FogStart = 0
+            Lighting.FogEnd = 999999
+            Lighting.Ambient = Color3.new(1,1,1)
+        else
+            Lighting.FogStart = oldLight.FogStart
+            Lighting.FogEnd = oldLight.FogEnd
+            Lighting.Ambient = oldLight.Ambient
+        end
+    end
+})
+secG:Toggle({
+    Title="Max Zoom",
+    Callback=function(v)
+        state.maxZoom = v
+        player.CameraMaxZoomDistance = v and 1000 or oldZoom
+    end
+})
+
+secG:Toggle({
+    Title="Dead Body ESP",
+    Callback=function(v)
+        state.deadBodyESP = v
+    end
+})
+
+-- ======= Dead Body Detection =======
+Workspace.ChildAdded:Connect(function(obj)
+    if obj.Name == "DeadBody" then
+        if not notified[obj] then
+            notify("DEAD BODY!")
+            notified[obj] = true
+        end
+        if state.deadBodyESP and Drawing then
+            BodyBOX[obj] = newBox()
+            BodyTEXT[obj] = newText(18)
+            BodyTEXT[obj].Text = "DEAD BODY"
+        end
+    end
+end)
+
+-- ======= Noclip enforcement =======
 RunService.Stepped:Connect(function()
     if state.noclip and player.Character then
-        for _, part in ipairs(player.Character:GetDescendants()) do
-            if part:IsA("BasePart") then
-                part.CanCollide = false
-            end
+        for _,p in ipairs(player.Character:GetDescendants()) do
+            if p:IsA("BasePart") then p.CanCollide = false end
         end
     end
 end)
 
--- ======= Function: attach / create ESP for player =======
-local function ensurePlayerESP(plr)
-    if not Drawing then return end
-    if ESPBoxes[plr] then return end
-    local box = safeCreateSquare(Color3.new(1,1,1), Vector2.new(20,20))
-    local txt = safeCreateText("", 14)
-    ESPBoxes[plr] = { Box = box, Text = txt }
-end
-
-local function removePlayerESP(plr)
-    if not Drawing then return end
-    local data = ESPBoxes[plr]
-    if data then
-        pcall(function() if data.Box then data.Box:Remove() end end)
-        pcall(function() if data.Text then data.Text:Remove() end end)
-        ESPBoxes[plr] = nil
-    end
-end
-
--- ======= Function: create dead body visuals =======
-local function ensureDeadBodyVisual(body)
-    if DeadBodyBoxes[body] then return end
-    if Drawing then
-        DeadBodyBoxes[body] = safeCreateSquare(Color3.fromRGB(255,0,0), Vector2.new(30,30))
-        DeadBodyTexts[body] = safeCreateText("DEAD BODY", 18)
-    else
-        DeadBodyBoxes[body] = nil
-        DeadBodyTexts[body] = nil
-    end
-end
-
-local function removeDeadBodyVisual(body)
-    if Drawing then
-        if DeadBodyBoxes[body] then pcall(function() DeadBodyBoxes[body]:Remove() end) end
-        if DeadBodyTexts[body] then pcall(function() DeadBodyTexts[body]:Remove() end) end
-    end
-    DeadBodyBoxes[body] = nil
-    DeadBodyTexts[body] = nil
-    notifiedBodies[body] = nil
-end
-
--- Populate existing dead bodies if toggle already on
-local function populateExistingDeadBodies()
-    for _, v in ipairs(Workspace:GetChildren()) do
-        if v and v.Name == "DeadBody" then
-            ensureDeadBodyVisual(v)
-            if not notifiedBodies[v] then
-                ShowNotification("DEAD BODY!", "A dead body has been found!")
-                notifiedBodies[v] = true
-            end
-        end
-    end
-end
-
--- Hook ChildAdded to detect new dead bodies and notify once
-Workspace.ChildAdded:Connect(function(obj)
-    if obj and obj.Name == "DeadBody" then
-        -- keep body in world (do nothing to remove it)
-        -- create visuals if toggle enabled
-        if state.deadBodyESP then
-            ensureDeadBodyVisual(obj)
-        end
-        if not notifiedBodies[obj] then
-            ShowNotification("DEAD BODY!", "A dead body has been found!")
-            notifiedBodies[obj] = true
-        end
-    end
-end)
-
--- Also clean up visuals when body is removed from workspace (if ever)
-Workspace.ChildRemoved:Connect(function(obj)
-    if obj and obj.Name == "DeadBody" then
-        removeDeadBodyVisual(obj)
-    end
-end)
-
--- ======= RenderStepped: update ESP & DeadBody visuals =======
+-- ======= ESP + Dead Body Rendering =======
 RunService.RenderStepped:Connect(function()
-    -- update player ESPs
-    for _, plr in ipairs(Players:GetPlayers()) do
-        if plr ~= player and plr.Character and plr.Character:FindFirstChild("HumanoidRootPart") then
-            if state.esp then
-                ensurePlayerESP(plr)
-                local data = ESPBoxes[plr]
-                if data and data.Box and data.Text then
-                    local pos, onScreen = camera:WorldToViewportPoint(plr.Character.HumanoidRootPart.Position)
-                    if onScreen then
-                        data.Box.Position = Vector2.new(pos.X - data.Box.Size.X/2, pos.Y - data.Box.Size.Y/2)
-                        data.Box.Visible = true
-                        -- role text (smaller)
-                        local role = "Neutral"
-                        local ps = plr:FindFirstChild("PublicStates")
-                        if ps and ps:FindFirstChild("SubRole") and ps.SubRole.Value ~= "" then
-                            -- if subrole is one of the neutral names, color orange — external role script likely sets PublicStates
-                            if (ps.SubRole.Value == "Jester" or ps.SubRole.Value == "Corrupted Witness" or ps.SubRole.Value == "Chimera" or ps.SubRole.Value == "Medusa" or ps.SubRole.Value == "Exploder" or ps.SubRole.Value == "Assassin" or ps.SubRole.Value == "Novisor") then
-                                role = ps.SubRole.Value
-                            end
-                        end
-                        if ps and ps:FindFirstChild("Role") and ps.Role.Value ~= "" then
-                            -- prefer subrole check first; if not present, use Role
-                            local roleName = ps.Role.Value
-                            if role == "Neutral" then role = roleName end
-                        end
-                        data.Text.Text = role
-                        data.Text.Position = Vector2.new(pos.X, pos.Y - 20)
-                        data.Text.Color = ROLE_COLORS[role] or Color3.new(1,1,1)
-                        data.Text.Visible = true
-                    else
-                        data.Box.Visible = false
-                        data.Text.Visible = false
-                    end
+    -- Player ESP (USERNAME)
+    for _, pl in ipairs(Players:GetPlayers()) do
+        if pl ~= player and pl.Character and pl.Character:FindFirstChild("HumanoidRootPart") then
+            if state.esp and Drawing then
+                if not ESPStorage[pl] then
+                    ESPStorage[pl] = {
+                        Box = newBox(),
+                        Text = newText(14)
+                    }
+                end
+
+                local d = ESPStorage[pl]
+                local hrp = pl.Character.HumanoidRootPart
+                local pos, vis = camera:WorldToViewportPoint(hrp.Position)
+                if vis then
+                    d.Box.Position = Vector2.new(pos.X-12, pos.Y-12)
+                    d.Box.Visible = true
+
+                    d.Text.Position = Vector2.new(pos.X, pos.Y-25)
+                    d.Text.Text = pl.Name
+                    d.Text.Visible = true
+                else
+                    d.Box.Visible = false
+                    d.Text.Visible = false
                 end
             else
-                -- remove if exists
-                removePlayerESP(plr)
-            end
-        else
-            removePlayerESP(plr)
-        end
-    end
-
-    -- update dead body visuals (position + rainbow text)
-    if state.deadBodyESP then
-        -- ensure visuals for any existing dead bodies
-        for _, obj in ipairs(Workspace:GetChildren()) do
-            if obj and obj.Name == "DeadBody" then
-                ensureDeadBodyVisual(obj)
+                if ESPStorage[pl] then
+                    pcall(function() ESPStorage[pl].Box:Remove() end)
+                    pcall(function() ESPStorage[pl].Text:Remove() end)
+                    ESPStorage[pl] = nil
+                end
             end
         end
     end
 
-    for body, box in pairs(DeadBodyBoxes) do
-        local text = DeadBodyTexts[body]
-        if body and body.Parent and box and text then
-            local p = body.PrimaryPart or body:FindFirstChild("Head") or body:FindFirstChildWhichIsA("BasePart")
-            local worldPos = (p and p.Position) and p.Position or body.Position or Vector3.new()
-            local pos, onScreen = camera:WorldToViewportPoint(worldPos + Vector3.new(0,3,0))
-            if onScreen and state.deadBodyESP then
-                box.Position = Vector2.new(pos.X - box.Size.X/2, pos.Y - box.Size.Y/2)
-                box.Visible = true
-                text.Position = Vector2.new(pos.X, pos.Y - 24)
-                text.Color = getRainbowColor()
-                text.Visible = true
-            else
-                box.Visible = false
-                text.Visible = false
+    -- Dead Body ESP
+    if state.deadBodyESP and Drawing then
+        for body, box in pairs(BodyBOX) do
+            if body and body.Parent then
+                local part = body.PrimaryPart or body:FindFirstChildWhichIsA("BasePart")
+                if part then
+                    local pos, vis = camera:WorldToViewportPoint(part.Position + Vector3.new(0,3,0))
+                    if vis then
+                        box.Position = Vector2.new(pos.X-15, pos.Y-15)
+                        box.Visible = true
+
+                        local txt = BodyTEXT[body]
+                        txt.Position = Vector2.new(pos.X, pos.Y-25)
+                        txt.Color = rainbow()
+                        txt.Visible = true
+                    end
+                end
             end
-        else
-            -- remove visuals if body deleted
-            if box then pcall(function() box:Remove() end) end
-            if text then pcall(function() text:Remove() end) end
-            DeadBodyBoxes[body] = nil
-            DeadBodyTexts[body] = nil
-            notifiedBodies[body] = nil
         end
     end
 end)
 
--- ======= Populate existing dead bodies if toggle was enabled at start =======
-task.defer(function()
-    task.wait(0.2)
-    if state.deadBodyESP then
-        populateExistingDeadBodies()
-    end
-end)
-
--- ======= Safety notes & finishing =======
--- If Drawing is not available the script will still provide WindUI, role loader, noclip, zoom, vision, and notifications (just without on-screen Drawing boxes).
-if not Drawing then
-    warn("Drawing API is not available in this environment — on-screen ESP boxes will be disabled.")
-end
-
--- Done. Enjoy!
+-- END SCRIPT
